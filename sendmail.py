@@ -16,10 +16,10 @@ import os
 import datetime
 import unicodecsv as csv
 
-smtpUser = 'commondvs@gmail.com'
+smtpUser = 'singstatdvs@gmail.com'
 smtpPass = 'singstatdvs123'
 
-toAdd = 'commondvs@gmail.com,xie_yilin@singstat.gov.sg'
+toAdd = 'singstatdvs@gmail.com,xie_yilin@singstat.gov.sg'
 fromAdd = smtpUser
 
 today = datetime.date.today()
