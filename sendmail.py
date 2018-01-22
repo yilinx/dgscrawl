@@ -1,76 +1,143 @@
 
 # coding: utf-8
 
-# This function will send email to the list of users under the <i>`toAdd`</i> variable. Add more user to receive the file seperated by comma. 
+# This version of send mail sends an email through gmail api. This is a secured way of sending emails and the mail will not be blocked by outlook.
 
-# In[8]:
+# In[4]:
 
 
-import smtplib
-from email.MIMEMultipart import MIMEMultipart
-from email.MIMEBase import MIMEBase
-from email.MIMEText import MIMEText
-from email.Utils import COMMASPACE, formatdate
-from email import Encoders
+import httplib2
 import os
-import datetime
-import unicodecsv as csv
+import oauth2client
+from oauth2client import client, tools
+import base64
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from apiclient import errors, discovery
+import mimetypes
+from email.mime.image import MIMEImage
+from email.mime.audio import MIMEAudio
+from email.mime.base import MIMEBase
 
-smtpUser = 'dvsprojectdev@gmail.com'
-smtpPass = 'singstatdvs123'
+SCOPES = 'https://www.googleapis.com/auth/gmail.send'
+CLIENT_SECRET_FILE = 'client_secret.json'
+APPLICATION_NAME = 'Gmail API Python Send Email'
 
-toAdd = 'dvsprojectdev@gmail.com,xie_yilin@singstat.gov.sg'
-fromAdd = smtpUser
+def get_credentials():
+    home_dir = os.path.expanduser('~')
+    credential_dir = os.path.join(home_dir, '.credentials')
+    if not os.path.exists(credential_dir):
+        os.makedirs(credential_dir)
+    credential_path = os.path.join(credential_dir,
+                                   'gmail-python-email-send.json')
+    store = oauth2client.file.Storage(credential_path)
+    credentials = store.get()
+    if not credentials or credentials.invalid:
+        flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
+        flow.user_agent = APPLICATION_NAME
+        credentials = tools.run_flow(flow, store)
+        print('Storing credentials to ' + credential_path)
+    return credentials
 
-today = datetime.date.today()
+def SendMessage(sender, to, subject, msgHtml, msgPlain, attachmentFile=None):
+    credentials = get_credentials()
+    http = credentials.authorize(httplib2.Http())
+    service = discovery.build('gmail', 'v1', http=http)
+    if attachmentFile:
+        message1 = createMessageWithAttachment(sender, to, subject, msgHtml, msgPlain, attachmentFile)
+    else: 
+        message1 = CreateMessageHtml(sender, to, subject, msgHtml, msgPlain)
+    result = SendMessageInternal(service, "me", message1)
+    return result
 
-subject  = 'DGS TDE File %s' % today.strftime('%Y %b %d')
-header = 'To :' + toAdd + '\n' + 'From : ' + fromAdd + '\n' + 'Subject : ' + subject + '\n'
-header2 = '<To :' + toAdd + '><' + 'From : ' + fromAdd + '><' + 'Subject : ' + subject + '>'
-body = 'This is a TDE extract of data.gov.sg taken on %s' % today.strftime('%Y %b %d')
+def SendMessageInternal(service, user_id, message):
+    try:
+        message = (service.users().messages().send(userId=user_id, body=message).execute())
+        print('Message Id: %s' % message['id'])
+        return message
+    except errors.HttpError as error:
+        print('An error occurred: %s' % error)
+        return "Error"
+    return "OK"
 
-attach = 'log.txt'
-
-print header
-
-
-def sendMail(to, subject, text, files=[]):
-    assert type(to)==list
-    assert type(files)==list
-
-    msg = MIMEMultipart()
-    msg['From'] = smtpUser
-    msg['To'] = COMMASPACE.join(to)
-    msg['Date'] = formatdate(localtime=True)
+def CreateMessageHtml(sender, to, subject, msgHtml, msgPlain):
+    msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
+    msg['From'] = sender
+    msg['To'] = to
+    msg.attach(MIMEText(msgPlain, 'plain'))
+    msg.attach(MIMEText(msgHtml, 'html'))
+    return {'raw': base64.urlsafe_b64encode(msg.as_string())}
 
-    msg.attach( MIMEText(text) )
+def createMessageWithAttachment(
+    sender, to, subject, msgHtml, msgPlain, attachmentFile):
+    """Create a message for an email.
 
-    for file in files:
-        part = MIMEBase('application', "octet-stream")
-        part.set_payload( open(file,"rb").read() )
-        Encoders.encode_base64(part)
-        part.add_header('Content-Disposition', 'attachment; filename="%s"'
-                       % os.path.basename(file))
-        msg.attach(part)
+    Args:
+      sender: Email address of the sender.
+      to: Email address of the receiver.
+      subject: The subject of the email message.
+      msgHtml: Html message to be sent
+      msgPlain: Alternative plain text message for older email clients          
+      attachmentFile: The path to the file to be attached.
 
-    server = smtplib.SMTP('smtp.gmail.com:587')
-    server.ehlo_or_helo_if_needed()
-    server.starttls()
-    server.ehlo_or_helo_if_needed()
-    server.login(smtpUser,smtpPass)
-    server.sendmail(smtpUser, to, msg.as_string())
+    Returns:
+      An object containing a base64url encoded email object.
+    """
+    message = MIMEMultipart('mixed')
+    message['to'] = to
+    message['from'] = sender
+    message['subject'] = subject
 
-    print 'Done'
+    messageA = MIMEMultipart('alternative')
+    messageR = MIMEMultipart('related')
 
-    server.quit()
+    messageR.attach(MIMEText(msgHtml, 'html'))
+    messageA.attach(MIMEText(msgPlain, 'plain'))
+    messageA.attach(messageR)
+
+    message.attach(messageA)
+
+    print("create_message_with_attachment: file: %s" % attachmentFile)
+    content_type, encoding = mimetypes.guess_type(attachmentFile)
+
+    if content_type is None or encoding is not None:
+        content_type = 'application/octet-stream'
+    main_type, sub_type = content_type.split('/', 1)
+    if main_type == 'text':
+        fp = open(attachmentFile, 'rb')
+        msg = MIMEText(fp.read(), _subtype=sub_type)
+        fp.close()
+    elif main_type == 'image':
+        fp = open(attachmentFile, 'rb')
+        msg = MIMEImage(fp.read(), _subtype=sub_type)
+        fp.close()
+    elif main_type == 'audio':
+        fp = open(attachmentFile, 'rb')
+        msg = MIMEAudio(fp.read(), _subtype=sub_type)
+        fp.close()
+    else:
+        fp = open(attachmentFile, 'rb')
+        msg = MIMEBase(main_type, sub_type)
+        msg.set_payload(fp.read())
+        fp.close()
+    filename = os.path.basename(attachmentFile)
+    msg.add_header('Content-Disposition', 'attachment', filename=filename)
+    message.attach(msg)
+
+    return {'raw': base64.urlsafe_b64encode(message.as_string())}
 
 
-sendMail( [toAdd], subject, body, [attach] )
+def main():
+    to = "xie_yilin@singstat.gov.sg"
+    sender = "dvsprojectdev@gmail.com"
+    subject = "testing"
+    msgHtml = "Hi<br/>Html Email"
+    msgPlain = "Hi\nPlain Email"
+    SendMessage(sender, to, subject, msgHtml, msgPlain)
+    # Send message with attachment: 
+    SendMessage(sender, to, subject, msgHtml, msgPlain, 'DGS-extract.zip')
 
-# Writes a log file upon success
-with open('log.txt','a') as f2:
-    writer = csv.DictWriter(f2, fieldnames=['Date','Action'], encoding='utf-8')
-    writer.writerow({'Date':today, 'Action':'sendMail()' + header2})
-    f2.close()
+if __name__ == '__main__':
+    main()
 
