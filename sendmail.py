@@ -1,50 +1,76 @@
 
 # coding: utf-8
 
-# This version of send mail sends an email through sendgrid api. This is a secured way of sending emails and the mail will not be blocked by outlook.
+# This function will send email to the list of users under the <i>`toAdd`</i> variable. Add more user to receive the file seperated by comma. 
 
-# In[11]:
+# In[4]:
 
 
-import base64
-import sendgrid
+import smtplib
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEBase import MIMEBase
+from email.MIMEText import MIMEText
+from email.Utils import COMMASPACE, formatdate
+from email import Encoders
 import os
-from sendgrid.helpers.mail import Email, Content, Mail, Attachment
-try:
-    # Python 3
-    import urllib.request as urllib
-except ImportError:
-    # Python 2
-    import urllib2 as urllib
+import datetime
+import unicodecsv as csv
 
-sg = sendgrid.SendGridAPIClient(apikey='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')
-from_email = Email("dvsprojectdev@gmail.com")
-subject = "test sending attachment"
-to_email = Email("xie_yilin@singstat.gov.sg")
-content = Content("text/html", "I'm a content example")
+smtpUser = 'dvsprojectdev@gmail.com'
+smtpPass = 'singstatdvs123'
 
-file_path = "DGS-extract.zip"
-with open(file_path,'rb') as f:
-    data = f.read()
-    f.close()
-encoded = base64.b64encode(data).decode()
+toAdd = 'dvsprojectdev@gmail.com'
+fromAdd = smtpUser
 
-attachment = Attachment()
-attachment.content = encoded
-attachment.type = "application/pdf"
-attachment.filename = "test.pdf"
-attachment.disposition = "attachment"
-attachment.content_id = "Example Content ID"
+today = datetime.date.today()
 
-mail = Mail(from_email, subject, to_email, content)
-mail.add_attachment(attachment)
-try:
-    response = sg.client.mail.send.post(request_body=mail.get())
-except urllib.HTTPError as e:
-    print(e.read())
-    exit()
+subject  = 'DGS Metadata File %s' % today.strftime('%Y %b %d')
+header = 'To :' + toAdd + '\n' + 'From : ' + fromAdd + '\n' + 'Subject : ' + subject + '\n'
+header2 = '<To :' + toAdd + '><' + 'From : ' + fromAdd + '><' + 'Subject : ' + subject + '>'
+body = 'This is a extract of data.gov.sg metadata taken on %s' % today.strftime('%Y %b %d')
 
-print(response.status_code)
-print(response.body)
-print(response.headers)
+attach = 'DGS-extract.zip'
+
+print header
+
+
+def sendMail(to, subject, text, files=[]):
+    assert type(to)==list
+    assert type(files)==list
+
+    msg = MIMEMultipart()
+    msg['From'] = smtpUser
+    msg['To'] = COMMASPACE.join(to)
+    msg['Date'] = formatdate(localtime=True)
+    msg['Subject'] = subject
+
+    msg.attach( MIMEText(text) )
+
+    for file in files:
+        part = MIMEBase('application', "octet-stream")
+        part.set_payload( open(file,"rb").read() )
+        Encoders.encode_base64(part)
+        part.add_header('Content-Disposition', 'attachment; filename="%s"'
+                       % os.path.basename(file))
+        msg.attach(part)
+
+    server = smtplib.SMTP('smtp.gmail.com:587')
+    server.ehlo_or_helo_if_needed()
+    server.starttls()
+    server.ehlo_or_helo_if_needed()
+    server.login(smtpUser,smtpPass)
+    server.sendmail(smtpUser, to, msg.as_string())
+
+    print 'Done'
+
+    server.quit()
+
+
+sendMail( [toAdd], subject, body, [attach] )
+
+# Writes a log file upon success
+with open('log.txt','a') as f2:
+    writer = csv.DictWriter(f2, fieldnames=['Date','Action'], encoding='utf-8')
+    writer.writerow({'Date':today, 'Action':'sendMail()' + header2})
+    f2.close()
 
