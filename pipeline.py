@@ -9,7 +9,7 @@
 # * `resourceEX.py`, 
 # * `schema.py`, 
 # * `joinSRC.py`, 
-# * `data2tde.py`
+# * `zipcsv.py`
 # * `sendmail.py`
 # </i> in the same directory as <i>`pipeline.py`</i>
 # <br\>
@@ -20,7 +20,7 @@
 # <br\>
 # In this step, we are importing the package metadata extraction function. This first step is important as the data from DGS will be crawlled and stored as a dictionary `dgs_crawl`. This dictionary is used by all other extraction functions (ie Resource and Schema).
 
-# In[ ]:
+# In[1]:
 
 
 import packageEX as step1
@@ -32,7 +32,7 @@ step1.write_pkg_metadata()
 # <br\>
 # In this step, we are importing the resource metadata extraction function.
 
-# In[ ]:
+# In[2]:
 
 
 import resourceEX as step2
@@ -44,7 +44,7 @@ step2.write_resource_metadata()
 # <br\>
 # In this step, we are importing the schema metadata extraction function.
 
-# In[ ]:
+# In[3]:
 
 
 import schemaEX as step3
@@ -54,7 +54,7 @@ step3.write_schema_metadata()
 
 # Step 4: Left join Package csv to Resource csv
 
-# In[ ]:
+# In[4]:
 
 
 import joinSRC as step4
@@ -62,18 +62,20 @@ import joinSRC as step4
 step4.joinsrc()
 
 
-# Step 5: Create tde file and zip it up for sending singstat mailbox. In this step, the construction of the tde runs automatically upon import. Calling function is not required.
+# Step 5: Zip up the joined csv file for sending
 
-# In[ ]:
+# In[5]:
 
 
-import data2tde 
+import zipcsv as step5
+
+step5.zipcsv()
 
 
 # Step 6: Send email to list of recepients. In this step, the send mail function is already built in. So no function is called in this step.
 
-# In[ ]:
+# In[6]:
 
 
-import sendmail
+import sendmail as step6
 
